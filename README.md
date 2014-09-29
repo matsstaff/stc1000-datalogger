@@ -33,8 +33,6 @@ The relevant control lines from the STC needs to be extracted.
 Connections on the Arduino
 --------------------------
 
-TODO: Check this table for correctness...
-
 |Arduino pin|Description|
 |--------|-------|
 |A0|Thermistor (1)|
@@ -45,11 +43,11 @@ TODO: Check this table for correctness...
 |5|Cooling relay|
 |6||
 |7|Push button|
-|8|ICSPCLK / Thermistor (2)|
-|9|ISCSPDAT / Buzzer|
+|8|ISCSPDAT / Buzzer|
+|9|ICSPCLK / Thermistor (2)|
 |10|SD Card Module CS (chip select)|
-|11|SD Card Module MISO (master input, slave output)|
-|12|SD Card Module MOSI (master output, slave input)|
+|11|SD Card Module MOSI (master output, slave input)|
+|12|SD Card Module MISO (master input, slave output)|
 |13|SD Card Module CLK (clock)|
 
 
