@@ -50,9 +50,13 @@ Connections on the Arduino
 |12|SD Card Module MISO (master input, slave output)|
 |13|SD Card Module CLK (clock)|
 
+I tried to make a Fritzing sketch of the connections, but I think I need to work on my skills.
+It might be of some help though.
+![Really nasty Fritzing sketch](img/fritzing.png)<br>
+*Fig 2: Fritzing sketch.*
 
 ![uSD card module](img/usd_module.jpg)<br>
-*Fig 2: Micro SD card module.*
+*Fig 3: Micro SD card module.*
 
 ![Photo interrupter module](img/photo_interrupter_module.png)<br>
-*Fig 3: Photo interrupter module.*
+*Fig 4: Photo interrupter module.*
