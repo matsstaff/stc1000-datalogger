@@ -33,22 +33,24 @@ The relevant control lines from the STC needs to be extracted.
 Connections on the Arduino
 --------------------------
 
-|Arduino pin|Description|
+|Arduino pin|Description|To|
 |--------|-------|
-|A0|Thermistor (1)|
-|A1|ICSPCLK / Thermistor (2)|
-|2|Photo interrupter module output|
-|3|nMCLR|
-|4|Heating relay|
-|5|Cooling relay|
+|A0|Thermistor 1|STC|
+|A1|ICSPCLK / Thermistor 2|STC|
+|A4|SDA|RTC module|
+|A5|SCL|RTC module|
+|2|Counter input|Photo interrupter|
+|3|nMCLR|STC|
+|4|Heating relay|STC|
+|5|Cooling relay|STC|
 |6||
-|7|Push button|
-|8|ISCSPDAT / Buzzer|
-|9|ICSPCLK / Thermistor (2)|
-|10|SD Card Module CS (chip select)|
-|11|SD Card Module MOSI (master output, slave input)|
-|12|SD Card Module MISO (master input, slave output)|
-|13|SD Card Module CLK (clock)|
+|7|Push button|Push button|
+|8|ISCSPDAT / Buzzer|STC|
+|9|ICSPCLK / Thermistor (2)|STC|
+|10|SD Card Module CS (chip select)|SD card module|
+|11|SD Card Module MOSI (master output, slave input)|SD card module|
+|12|SD Card Module MISO (master input, slave output)|SD card module|
+|13|SD Card Module CLK (clock)|SD card module|
 
 I tried to make a Fritzing sketch of the connections, but I think I need to work on my skills.
 It might be of some help though.
@@ -60,3 +62,6 @@ It might be of some help though.
 
 ![Photo interrupter module](img/photo_interrupter_module.png)<br>
 *Fig 4: Photo interrupter module.*
+
+![Real time counter module](img/rtc.jpg)<br>
+*Fig 5: Photo interrupter module.*
