@@ -30,6 +30,13 @@ The relevant control lines from the STC needs to be extracted.
 |15|GND|
 |16|GND|
 
+![Programming header pinout](img/prog_header_pinout.jpg)<br>
+*Fig 2: Programming header pinout.*
+
+![Thermistor terminal pinout](img/th_pinout.png)<br>
+*Fig 3: Thermistor terminal pinout.*
+
+
 Connections on the Arduino
 --------------------------
 
@@ -55,13 +62,15 @@ Connections on the Arduino
 I tried to make a Fritzing sketch of the connections, but I think I need to work on my skills.
 It might be of some help though.
 ![Really nasty Fritzing sketch](img/fritzing.png)<br>
-*Fig 2: Fritzing sketch.*
+*Fig 4: Fritzing sketch.*
 
 ![uSD card module](img/usd_module.jpg)<br>
-*Fig 3: Micro SD card module.*
+*Fig 5: Micro SD card module.*
 
 ![Photo interrupter module](img/photo_interrupter_module.png)<br>
-*Fig 4: Photo interrupter module.*
+*Fig 6: Photo interrupter module.*
 
 ![Real time counter module](img/rtc.jpg)<br>
-*Fig 5: Photo interrupter module.*
+*Fig 7: Photo interrupter module.*
+
+
