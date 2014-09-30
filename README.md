@@ -33,17 +33,17 @@ The relevant control lines from the STC needs to be extracted.
 Connections on the Arduino
 --------------------------
 
-|Arduino pin|Description|To|
-|--------|-------|
+|Arduino pin|Description|Device pin|
+|-----------|-----------|----------|
 |A0|Thermistor 1|STC|
-|A1|ICSPCLK / Thermistor 2|STC|
+|A1|ICSPCLK/Thermistor 2|STC|
 |A4|SDA|RTC module|
 |A5|SCL|RTC module|
 |2|Counter input|Photo interrupter|
 |3|nMCLR|STC|
 |4|Heating relay|STC|
 |5|Cooling relay|STC|
-|6||
+|6|||
 |7|Push button|Push button|
 |8|ISCSPDAT / Buzzer|STC|
 |9|ICSPCLK / Thermistor (2)|STC|
