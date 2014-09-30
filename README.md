@@ -36,6 +36,8 @@ The relevant control lines from the STC needs to be extracted.
 ![Thermistor terminal pinout](img/th_pinout.png)<br>
 *Fig 3: Thermistor terminal pinout.*
 
+Note that on the stock STC, the third pole (for Th2) as well as R3 (10k resistor, needed for Th2 input) is unpopulated. To connect a second probe, you will need this resistor (between ICSPCLK and ground) as well as an NTC 10k B2425 thermistor connected between Vcc and ICSPCLK. Luckily these connections can be found on the programming header as well.
+
 
 Connections on the Arduino
 --------------------------
@@ -71,6 +73,6 @@ It might be of some help though.
 *Fig 6: Photo interrupter module.*
 
 ![Real time counter module](img/rtc.jpg)<br>
-*Fig 7: Photo interrupter module.*
+*Fig 7:Real time counter module.*
 
 
