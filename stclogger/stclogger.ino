@@ -266,6 +266,8 @@ void loop() {
 		mylogentry.temp.type = 0;
 		mylogentry.temp.ad1 = (adc1 >> 3);
 		mylogentry.temp.ad2 = (adc2 >> 3);
+		adc1 = 0;
+		adc2 = 0;
 		noInterrupts();
 		bc = bubble_counter;
 		bubble_counter = 0;
