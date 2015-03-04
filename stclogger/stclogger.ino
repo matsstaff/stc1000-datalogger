@@ -20,11 +20,12 @@
 *
 * This sketch will allow logging of temperature(s), on time for
 * heating and cooling and optionally the amount of bubbles passing
-* through the air lock (with a light gate module) to an SD/uSD card
-* using a SD/uSD module. The sketch is targeting the Arduino Pro Mini.
+* through the air lock (with a light gate module) to a 24c256.
+* The sketch is targeting the Arduino Pro Mini.
 */
 
-#include <SD.h>
+#include <Wire.h>
+#include <EEPROM.h>
 #include "math.h"
 
 #define T1_PIN              A0
@@ -33,29 +34,84 @@
 #define nMCRL_PIN           3
 #define HEAT_PIN            4
 #define COOL_PIN            5
-#define SWITCH_PIN          7
+//#define SWITCH_PIN          7
 #define ICSPDAT_PIN         8
 #define ICSPCLK_PIN         9
-#define SD_SPI_CS_PIN      10
-#define SD_SPI_MOSI_PIN    11
-#define SD_SPI_MISO_PIN    12
-#define SD_SPI_CLK_PIN     13
+
+// 24C256 
+// All pins grounded except PIN 5 -> A4, PIN 6 -> A5, PIN 8 -> Vcc
+#define AT24C256_PIN5_SDA		A4
+#define AT24C256_PIN6_SCL		A5
+#define AT24C256_I2C_ADDRESS	0x50
 
 const int ad_lookup[] = { 
   0, -486, -355, -270, -205, -151, -104, -61, -21, 16, 51, 85, 119, 152, 184, 217, 250, 284, 318, 354, 391, 431, 473, 519, 569, 624, 688, 763, 856, 977, 1154, 1482 };
 
-volatile unsigned long bubble_counter = 0;
-int t1, t2;
-boolean debug = 0;
-boolean logging = 0;
-unsigned int logfileno = 0;
-char logfilename[13];
+volatile unsigned int bubble_counter = 0;
+static unsigned char logging = 0;
 
+typedef union log_entry_u {
+	unsigned char raw[4];
+	struct temp_str {
+		unsigned type		: 1;
+		unsigned bcx16		: 1;
+		unsigned ad1		: 11;
+		unsigned ad2		: 11;
+		unsigned bc		: 8;
+	} temp;
+ 	struct relay_str {
+		unsigned res2		: 1;
+		unsigned heating	: 1;
+		unsigned on		: 1;
+		unsigned res3		: 13;
+		unsigned timestamp	: 16;
+	} relay;
+} logentry;
+
+/**
+ * Write data to serial EEPROM
+ */
+void write_24c256(unsigned int address, const unsigned char *buf, int n) {
+    while (n > 0) {
+        Wire.beginTransmission(AT24C256_I2C_ADDRESS);
+        Wire.write((unsigned char)(address >> 8));        // hi-byte of address
+        Wire.write((unsigned char)address);
+        while (n) {
+            Wire.write(*buf++);
+            n--;
+            if ((++address & 63) == 0)             // page boundary
+                break;
+        }
+        Wire.endTransmission();
+        delay(10);                             // time to write
+    }
+}
+
+/**
+ * Read data from serial EEPROM
+ */
+void read_24c256(unsigned int address, unsigned char *buf, int n) {
+    Wire.beginTransmission(AT24C256_I2C_ADDRESS);
+    Wire.write((unsigned char)(address >> 8)); // MSB
+    Wire.write((unsigned char)address & 0xFF); // LSB
+    Wire.endTransmission();
+    Wire.requestFrom(AT24C256_I2C_ADDRESS, n);
+    while (n) {
+      if (Wire.available()){
+        *buf++ = Wire.read();
+        n--;
+      }
+    }
+}
+
+/**
+ * Convert 11 bit ADC value to a temperature
+ */
 static int ad_to_temp(unsigned int adfilter){
   unsigned char i;
   long temp = 32;
-  unsigned char a = ((adfilter >> 5) & 0x3f); // Lower 6 bits
-  unsigned char b = ((adfilter >> 11) & 0x1f); // Upper 5 bits
+  unsigned char a = (adfilter & 0x3f); // Lower 6 bits
+  unsigned char b = ((adfilter >> 6) & 0x1f); // Upper 5 bits
 
   // Interpolate between lookup table points
   for (i = 0; i < 64; i++) {
@@ -71,69 +127,30 @@ static int ad_to_temp(unsigned int adfilter){
   return (temp >> 6);
 }
 
-static boolean read_temperatures(){
-  static unsigned long last=millis();
-  static unsigned char count=0;
-  static unsigned int ad_filter1=0x7fff;
-  static unsigned int ad_filter2=0x7fff;
-  boolean new_temps=false;
-
-  /* Take new reading (alternating between T1 and T2 every 60ms */
-  /* and filter it with leaky integrator */
-  /* This mimics the handling on STC-1000+ */
-  if(millis()-last >= 60){
-    last += 60;
-    if(count&1){
-      ad_filter2 = (ad_filter2 - (ad_filter2 >> 6)) + analogRead(T2_PIN);
-    } 
-    else {
-      ad_filter1 = (ad_filter1 - (ad_filter1 >> 6)) + analogRead(T1_PIN);
-    }
-    count++;
-
-    /* Convert A/D filters to temperatures */
-    if(count>=16){
-      t1 = ad_to_temp(ad_filter1);
-      t2 = ad_to_temp(ad_filter2);
-      count=0;
-      new_temps = true;
-    }
-  }
-  return new_temps;
+static void print_logentry(union log_entry_u entry){
+	if(entry.temp.type){
+		Serial.print(entry.relay.heating ? "heat " : "cool ");
+		Serial.print(entry.relay.on ? "on " : "off ");
+		Serial.print("@ ");
+		Serial.println(entry.relay.timestamp, DEC);
+	} else {
+		unsigned int bc = entry.temp.bc;
+		if(entry.temp.bcx16){
+			bc <<= 4;
+		}
+		Serial.print(ad_to_temp(entry.temp.ad1), DEC);
+		Serial.print(";");
+		Serial.print(ad_to_temp(entry.temp.ad2), DEC);
+		Serial.print(";");
+		Serial.print(bc, DEC);
+		Serial.println(";");
+	}
 }
 
 /* Enable/disable buzzer on STC-1000 */
 static void buzz(boolean on){
   pinMode(ICSPDAT_PIN, on ? OUTPUT : INPUT);
   digitalWrite(ICSPDAT_PIN, on ? HIGH : LOW);
-}
-
-/* Generate logfile name */
-/* Ugly, but works*/
-static char *get_logfile_name(int i){
-  char j;
-  
-  logfilename[0] = 's';
-  logfilename[1] = 't';
-  logfilename[2] = 'c';
-  logfilename[3] = '1';
-  logfilename[4] = '0';
-  logfilename[5] = '0';
-  logfilename[6] = '0';
-  logfilename[7] = 'p';
-  logfilename[8] = '.';
-  for(j=0; i>100; j++){
-    i-=100;
-  }
-  logfilename[9] = '0' + j;
-  for(j=0; i>10; j++){
-    i-=10;
-  }
-  logfilename[10] = '0'+ j;
-
-  logfilename[11] = '0'+i;
-  logfilename[12] = '\0';
-  return logfilename;
 }
 
 /* Accept commands from serial */
@@ -149,90 +166,23 @@ static void handle_rx(){
       buzz(LOW);
       Serial.println("Buzzer off");
       break;
-    case 'd':
-      debug = !debug;
-      Serial.print("Debugging ");
-      Serial.println(debug ? "on" : "off");
-      break;
-    case 'l':
-      logging = !logging;
-      Serial.print("Logging ");
-      Serial.println(logging ? "on" : "off");
-      /* Fallthrough */
-    case 'f':
-      Serial.print("Filename: ");
-      Serial.println(logfilename);
-      break;
-    case 'r':
-      logfileno = 0;
-      get_logfile_name(logfileno);
-      break;
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-      if(logfileno<100){
-        logfileno=(logfileno*10)+(command-'0');
-        get_logfile_name(logfileno);
-      }
+    case 'e':
+      Serial.println("Enable logging and halt");
+      EEPROM.write(0,1);
+      while(1);
       break;
     case 'p':
-      {
-        File dataFile = SD.open(logfilename);
-        if (dataFile) {
-          while (dataFile.available()) {
-            Serial.write(dataFile.read());
-          }
-          dataFile.close();
-        }
-      }
+	{
+		int i;
+		logentry mylogentry;
+		for(i=0; i<32768; i+=4){
+			read_24c256(i, mylogentry.raw, 4);
+			print_logentry(mylogentry);
+		}
+	}
       break;
     }
   }
-}
-
-/* Check for pushbutton being released (low-high transition) */
-static boolean button_press(){
-  static unsigned long last = millis();
-  static boolean btn=1;
-  
-  if(millis() - last >= 25){
-    last+=25;
-    if(digitalRead(SWITCH_PIN)!=btn){
-      btn=!btn;
-      return btn;
-    }
-  }
-  return 0;  
-}
-
-/* Print one line of logdata to serial, SD or whatever... */
-static void log_data(Print *p){
-  unsigned long bc;
-  
-  /*Disable interrupts while reading bubble count variable */
-  noInterrupts();
-  bc = bubble_counter;
-  interrupts();
-
-  p->print(t1, DEC); 
-  p->print(";"); 
-  p->print(t2, DEC); 
-  p->print(";");
-  p->print(digitalRead(HEAT_PIN), DEC);    
-  p->print(";");
-  p->print(digitalRead(COOL_PIN), DEC);
-  p->print(";");
-  p->print(digitalRead(SWITCH_PIN), DEC);
-  p->print(";");
-  p->print(bc, DEC);
-  p->println();
 }
 
 /* Interrupt service routine for counting bubbles */
@@ -240,93 +190,103 @@ void bubble_count_isr() {
   bubble_counter++;
 }
 
-void setup()
-{
+void setup() {
   // Open serial communications and wait for port to open:
   Serial.begin(115200);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for Leonardo only
   }
 
-  Serial.println("Initializing SD card...");
-
-  pinMode(SD_SPI_CS_PIN, OUTPUT);
-  digitalWrite(SD_SPI_CS_PIN, HIGH);
-  while(!SD.begin(SD_SPI_CS_PIN)) {
-    Serial.println("SD card failed, or not present");
-    buzz(1);
-    delay(100);
-    buzz(0);
-    delay(900);
-  }
-  Serial.println("SD card initialized.");
-  
-  while(SD.exists(get_logfile_name(logfileno))){
-    logfileno++;
-    if(logfileno>999){
-      Serial.println("Too many logfiles...");
-      while(1){
-        buzz(1);
-        delay(300);
-        buzz(0);
-        delay(700);
-      }
-    }
-  }
-  Serial.print("Using log file: ");
-  Serial.println(logfilename);
+  Wire.begin(); 
 
   pinMode(BUBBLE_COUNT_PIN, INPUT);
   attachInterrupt(0, bubble_count_isr, RISING);
 
   pinMode(nMCRL_PIN, INPUT);
-  pinMode(SWITCH_PIN, INPUT);
-  digitalWrite(SWITCH_PIN, HIGH);
+//  pinMode(SWITCH_PIN, INPUT);
+//  digitalWrite(SWITCH_PIN, HIGH);
   pinMode(ICSPDAT_PIN, INPUT);
   pinMode(ICSPCLK_PIN, INPUT);
 
   pinMode(HEAT_PIN, INPUT);
   pinMode(COOL_PIN, INPUT);
+
+  logging = EEPROM.read(0);
+  EEPROM.write(0,0);
 }
 
-void loop()
-{
+void loop() {
   static unsigned long last = millis();
-  static unsigned int rows=0;
+  static unsigned long last_temp = last;
+  static unsigned int adc1=0, adc2=0;
+  static unsigned char heat=LOW, cool=LOW;
+  static unsigned int address = 0;
+  unsigned char di;
+  unsigned long curr_millis;
 
-  if(read_temperatures() && millis() - last > 60000){
-    last += 60000;
-    if(debug){
-      log_data(&Serial);
-    }
-    if(logging){
-      File dataFile = SD.open(logfilename, FILE_WRITE);
-      if(dataFile) {
-        log_data(&dataFile);
-        dataFile.close();
-        /* New logfile every 24h */
-        if(++rows >= 3600){
-          get_logfile_name(++logfileno);
-          rows=0;
-        }
-      }
-    }
+  curr_millis = millis();
+
+  if(logging){  
+	  di = digitalRead(HEAT_PIN);
+	  if(di!=heat){
+		logentry mylogentry;
+		mylogentry.temp.type = 1;
+		mylogentry.relay.heating = 1;
+		mylogentry.relay.on = di;
+		mylogentry.relay.timestamp = curr_millis - last;
+		heat = di;
+		write_24c256(address, mylogentry.raw, 4);
+		address += 4;
+	  }
+
+	  di = digitalRead(COOL_PIN);
+	  if(di!=cool){
+		logentry mylogentry;
+		mylogentry.temp.type = 1;
+		mylogentry.relay.heating = 0;
+		mylogentry.relay.on = di;
+		mylogentry.relay.timestamp = curr_millis - last;
+		cool = di;
+		write_24c256(address, mylogentry.raw, 4);
+		address += 4;
+	  }
+
+	  if(curr_millis - last_temp >= 1875){
+		last_temp += 1875;
+		analogRead(T1_PIN);
+		adc1 += analogRead(T1_PIN);
+		analogRead(T2_PIN);
+		adc2 += analogRead(T2_PIN);
+	  }
+
+	  if(curr_millis - last >= 60000){
+		logentry mylogentry;
+		unsigned int bc;
+		last += 60000;
+		mylogentry.temp.type = 0;
+		mylogentry.temp.ad1 = (adc1 >> 3);
+		mylogentry.temp.ad2 = (adc2 >> 3);
+		noInterrupts();
+		bc = bubble_counter;
+		bubble_counter = 0;
+		interrupts();
+		if(bc > 255){
+			mylogentry.temp.bcx16 = 1;
+			bc += 8;
+			bc >>= 4;
+			bc = (bc > 255) ? 255; bc;
+		} else {
+			mylogentry.temp.bcx16 = 0;
+		}
+		mylogentry.temp.bc = bc;
+		write_24c256(address, mylogentry.raw, 4);
+		address += 4;
+	  }
+	if(address >= 32768){
+		logging = 0;
+	}
   }
-
   handle_rx();
-
-  if(button_press()){
-    buzz(1);
-    delay(100);
-    buzz(0);
-    logging=!logging;
-    if(logging){
-      delay(100);
-      buzz(1);
-      delay(100);
-      buzz(0);
-    }
-  }
 
 }
 
